@@ -100,7 +100,7 @@ impl BuildHasher for DefaultHashBuilder {
 // Node is an internal struct used to encapsulate the nodes that will be added and
 // removed from `HashRing`
 #[derive(Debug)]
-struct Node<T> {
+pub struct Node<T> {
     key: u64,
     node: T,
 }
@@ -212,6 +212,31 @@ impl<T: Hash, S: BuildHasher> HashRing<T, S> {
         }
 
         Some(&self.ring[n].node)
+    }
+
+    /// Get the node index responsible for `key`. Returns an `Option` that will contain the `node`
+    /// index if the hash ring is not empty or `None` if it was empty.
+    pub fn get_index<U: Hash>(&self, key: &U) -> Option<usize> {
+        if self.ring.is_empty() {
+            return None;
+        }
+
+        let k = get_key(&self.hash_builder, key);
+        let n = match self.ring.binary_search_by(|node| node.key.cmp(&k)) {
+            Err(n) => n,
+            Ok(n) => n,
+        };
+
+        if n == self.ring.len() {
+            return Some(0);
+        }
+
+        Some(n)
+    }
+
+    /// Get the internal vector of nodes.
+    pub fn ring(&self) -> &Vec<Node<T>> {
+        &self.ring
     }
 }
 
@@ -349,5 +374,45 @@ mod tests {
         }
         println!("{:?}", nodes);
         assert!(nodes.iter().all(|x| *x != 0));
+    }
+
+    #[test]
+    fn get_nodes_in_counterclockwise() {
+        let mut ring: HashRing<VNode> = HashRing::new();
+
+        assert_eq!(ring.get(&"foo"), None);
+
+        let vnode1 = VNode::new("127.0.0.1", 1024, 1);
+        let vnode2 = VNode::new("127.0.0.1", 1024, 2);
+        let vnode3 = VNode::new("127.0.0.2", 1024, 1);
+        let vnode4 = VNode::new("127.0.0.2", 1024, 2);
+        let vnode5 = VNode::new("127.0.0.2", 1024, 3);
+        let vnode6 = VNode::new("127.0.0.3", 1024, 1);
+
+        ring.add(vnode1);
+        ring.add(vnode2);
+        ring.add(vnode3);
+        ring.add(vnode4);
+        ring.add(vnode5);
+        ring.add(vnode6);
+
+        assert_eq!(ring.get(&"foo"), Some(&vnode1));
+        assert_eq!(ring.get(&"bar"), Some(&vnode1));
+        assert_eq!(ring.get(&"baz"), Some(&vnode3));
+
+        assert_eq!(ring.get(&"abc"), Some(&vnode6));
+        assert_eq!(ring.get(&"def"), Some(&vnode3));
+        assert_eq!(ring.get(&"ghi"), Some(&vnode2));
+
+        assert_eq!(ring.get(&"cat"), Some(&vnode1));
+        assert_eq!(ring.get(&"dog"), Some(&vnode3));
+        assert_eq!(ring.get(&"bird"), Some(&vnode3));
+
+        let nodes = ring.ring();
+        let mut i = ring.get_index(&vnode1).unwrap();
+        for _ in 0..6 {
+            println!("{:?}", nodes[i]);
+            i = (i + 1) % 6;
+        }
     }
 }
