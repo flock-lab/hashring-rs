@@ -214,6 +214,16 @@ impl<T: Hash, S: BuildHasher> HashRing<T, S> {
         Some(&self.ring[n].node)
     }
 
+    /// Get the node responsible for the index `i`. Returns an `Option` that will contain the `node`
+    /// if the hash ring is not empty or `None` if it was empty.
+    pub fn get_by_index(&self, i: usize) -> Option<&T> {
+        if self.ring.is_empty() {
+            return None;
+        }
+
+        Some(&self.ring[i % self.ring.len()].node)
+    }
+
     /// Get the node index responsible for `key`. Returns an `Option` that will contain the `node`
     /// index if the hash ring is not empty or `None` if it was empty.
     pub fn get_index<U: Hash>(&self, key: &U) -> Option<usize> {
@@ -411,6 +421,10 @@ mod tests {
         let nodes = ring.ring();
         let mut i = ring.get_index(&vnode1).unwrap();
         for _ in 0..6 {
+            assert_eq!(
+                format!("{:?}", ring.get_by_index(i).unwrap()),
+                format!("{:?}", nodes[i].node)
+            );
             println!("{:?}", nodes[i]);
             i = (i + 1) % 6;
         }
